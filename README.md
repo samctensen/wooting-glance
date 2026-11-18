@@ -8,7 +8,7 @@ working or a response is ready. Each LED, color, and status pattern will be
 customizable. Muse support is being investigated.
 
 **Status:** early development. Browser integrations are not available yet.
-The repository currently contains a macOS hardware diagnostic. Single-LED
+The repository currently contains a macOS hardware diagnostic. One- and two-LED
 previews and restoration have been exercised on an 80HE; full-bar control is
 still being investigated.
 
@@ -31,10 +31,13 @@ Requires macOS, Rust 1.89 or later, and one connected Wooting 80HE.
 cargo run --locked -- devices
 cargo run --locked -- inspect
 cargo run --locked -- preview 1 FF0000
+cargo run --locked -- preview 1 FF8000 10 00CCFF
 ```
 
-`preview` takes an LED number from 1–10 and a six-digit RGB color. It checks the
-keyboard's reported color, waits three seconds, then uploads the saved lighting
+Choose one or two distinct LEDs (1–10) and a six-digit RGB color for each. LED 1
+is the far-left segment. A single LED overlays the saved effects. Two LEDs use
+a temporary profile at the saved brightness, with the other eight LEDs dark.
+Glance checks the selected colors, waits three seconds, then uploads the saved lighting
 and reads the bar again. Save pending changes in Wootility first and leave its
 editor untouched during the preview. The diagnostic only changes RAM.
 

@@ -8,10 +8,11 @@ const HELP: &str = "Wooting Glance — experimental 80HE hardware diagnostic
 
 glance devices                List supported keyboards (read-only)
 glance inspect                Read active profile and ten LED colors
-glance preview LED RRGGBB      Preview one LED (1–10) for three seconds
+glance preview LED RGB [LED RGB]  Preview one or two LEDs for three seconds
 glance restore                Recover saved lighting after an interrupted preview
 
 Recovery is stored in ~/Library/Application Support/wooting-glance/.
+With two LEDs the other eight go dark for the preview.
 Before preview: save changes in Wootility and leave its editor untouched.
 Preview currently requires an enabled, non-inherited onboard bar profile.
 No command saves lighting to the keyboard's flash memory.";
@@ -32,19 +33,27 @@ fn parse(args: &[String]) -> Result<Command> {
         ["devices"] => Command::Devices,
         ["inspect"] => Command::Inspect,
         ["restore"] => Command::Restore,
-        ["preview", led, color] => {
-            let led: u8 = led.parse()?;
-            ensure!((1..=10).contains(&led), "LED must be from 1 to 10");
-            let color = color.strip_prefix('#').unwrap_or(color);
-            ensure!(
-                color.len() == 6 && color.bytes().all(|b| b.is_ascii_hexdigit()),
-                "color must contain six hexadecimal digits"
-            );
-            let word = u32::from_str_radix(color, 16)?.to_be_bytes();
-            Command::Preview(vec![(led - 1, [word[1], word[2], word[3]])])
+        ["preview", led, color] => Command::Preview(vec![parse_led(led, color)?]),
+        ["preview", first, first_color, second, second_color] => {
+            let a = parse_led(first, first_color)?;
+            let b = parse_led(second, second_color)?;
+            ensure!(a.0 != b.0, "choose two different LEDs");
+            Command::Preview(vec![a, b])
         }
         _ => bail!("unknown command or arguments; run `glance --help`"),
     })
+}
+
+fn parse_led(led: &str, color: &str) -> Result<(u8, [u8; 3])> {
+    let led: u8 = led.parse()?;
+    ensure!((1..=10).contains(&led), "LED must be from 1 to 10");
+    let color = color.strip_prefix('#').unwrap_or(color);
+    ensure!(
+        color.len() == 6 && color.bytes().all(|b| b.is_ascii_hexdigit()),
+        "color must contain six hexadecimal digits"
+    );
+    let word = u32::from_str_radix(color, 16)?.to_be_bytes();
+    Ok((led - 1, [word[1], word[2], word[3]]))
 }
 
 fn main() {
@@ -183,6 +192,14 @@ mod tests {
         ] {
             assert!(command(&args).is_err());
         }
+    }
+    #[test]
+    fn preview_accepts_two_distinct_leds() {
+        assert_eq!(
+            command(&["preview", "1", "FF8000", "10", "00CCFF"]).unwrap(),
+            Command::Preview(vec![(0, [255, 128, 0]), (9, [0, 204, 255])])
+        );
+        assert!(command(&["preview", "1", "ff0000", "1", "ffffff"]).is_err());
     }
     #[test]
     fn no_arguments_show_help_and_unsupported_patterns_are_rejected() {

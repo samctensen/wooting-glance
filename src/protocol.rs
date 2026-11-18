@@ -97,11 +97,8 @@ pub fn baseline(stored: &[u8]) -> Result<BarProfile> {
 }
 
 pub fn preview(stored: &[u8], leds: &[(u8, [u8; 3])]) -> Result<Vec<u8>> {
-    baseline(stored)?;
-    ensure!(
-        leds.len() == 1,
-        "this diagnostic previews one LED at a time"
-    );
+    let saved = baseline(stored)?;
+    ensure!((1..=2).contains(&leds.len()), "choose one or two LEDs");
     let mut seen = [false; LED_COUNT];
     let mut layers = Vec::with_capacity(leds.len());
     for &(index, rgb) in leds {
@@ -118,8 +115,20 @@ pub fn preview(stored: &[u8], leds: &[(u8, [u8; 3])]) -> Result<Vec<u8>> {
             }),
         });
     }
-    // Preserve saved bytes and unknown fields; append one temporary layer.
-    let mut body = stored.to_vec();
+    let mut body = if leds.len() == 2 {
+        // Two indicators own the bar during preview. Keep the saved brightness.
+        let mut frame = BarProfile {
+            enabled: true,
+            layers: vec![],
+            inherits: false,
+            brightness: saved.brightness,
+        }
+        .encode_to_vec();
+        frame.extend([24, 0]); // Explicit inheritGlobal=false, including field presence.
+        frame
+    } else {
+        stored.to_vec()
+    };
     body.extend(Overlay { layers }.encode_to_vec());
     ensure!(body.len() <= 2040, "overlay exceeds the largest HID report");
     Ok(body)
@@ -242,6 +251,24 @@ mod tests {
         assert!(preview(&stored, &[(10, [0, 0, 0])]).is_err());
         assert!(preview(&stored, &[(0, [0, 0, 0]), (0, [1, 1, 1])]).is_err());
         assert!(preview(&stored, &[]).is_err());
+    }
+
+    #[test]
+    fn pair_uses_only_the_selected_layers_and_retains_brightness() {
+        let stored = [8, 1, 18, 0, 32, 128, 1];
+        let body = preview(&stored, &[(0, [255, 128, 0]), (9, [0, 204, 255])]).unwrap();
+        let frame = BarProfile::decode(body.as_slice()).unwrap();
+        assert_eq!(frame.brightness, Some(128));
+        assert_eq!(frame.layers.len(), 2);
+        for (layer, index, color) in [
+            (&frame.layers[0], 0, 0xffff8000),
+            (&frame.layers[1], 9, 0xff00ccff),
+        ] {
+            let solid = Layer::decode(layer.as_slice()).unwrap().solid.unwrap();
+            assert_eq!(solid.argb, color);
+            let canvas = solid.canvas.unwrap();
+            assert_eq!((canvas.start, canvas.end), (Some(index), Some(index)));
+        }
     }
 
     #[test]
