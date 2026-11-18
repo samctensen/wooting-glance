@@ -8,7 +8,9 @@ working or a response is ready. Each LED, color, and status pattern will be
 customizable. Muse support is being investigated.
 
 **Status:** early development. Browser integrations are not available yet.
-The first milestone is testing temporary LED control and restoration on macOS.
+The repository currently contains a macOS hardware diagnostic. Single-LED
+previews and restoration have been exercised on an 80HE; full-bar control is
+still being investigated.
 
 Glance is designed to work alongside Wootility, which remains responsible for
 your keyboard configuration. This is an independent project, not affiliated with
@@ -20,6 +22,52 @@ or endorsed by Wooting, OpenAI, Anthropic, or Muse.
 - Individual LED and color controls, with useful defaults.
 - Local processing; no collection of prompts or responses.
 - Temporary lighting overlays that return to your saved Wootility settings.
+
+## Try the diagnostic
+
+Requires macOS, Rust 1.89 or later, and one connected Wooting 80HE.
+
+```sh
+cargo run --locked -- devices
+cargo run --locked -- inspect
+cargo run --locked -- preview 1 FF0000
+```
+
+`preview` takes an LED number from 1–10 and a six-digit RGB color. It checks the
+keyboard's reported color, waits three seconds, then uploads the saved lighting
+and reads the bar again. Save pending changes in Wootility first and leave its
+editor untouched during the preview. The diagnostic only changes RAM.
+
+Preview currently requires an enabled bar with **Inherit global effects** off
+and an onboard profile. Disabled, inherited, and linked profiles are not yet
+supported. A ten-color frame was ignored during testing; simultaneous control
+of all ten LEDs is not claimed by this version.
+
+If the process is killed or the keyboard is disconnected mid-preview, reconnect
+it and run:
+
+```sh
+cargo run --locked -- restore
+```
+
+Recovery state lives in `~/Library/Application Support/wooting-glance/`, outside
+the repository. It records the device identity and saved bar configuration before
+any preview write. Commands share a lock to prevent concurrent changes. Recovery
+uses the keyboard's latest saved lighting and keeps the record if upload or
+readback fails. Readback is a color snapshot, not proof that an animated effect
+matches at every instant. Other RGB applications may interfere.
+
+## Development
+
+```sh
+cargo fmt --check
+cargo test --locked
+cargo clippy --locked --all-targets -- -D warnings
+```
+
+Protocol framing, malformed replies, color validation, restoration failures, and
+concurrent-command protection are tested without a keyboard. CI runs on macOS.
+Protocol attribution is in [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## License
 
