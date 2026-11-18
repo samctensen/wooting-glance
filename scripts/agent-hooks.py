@@ -14,7 +14,8 @@ def configure(path, service, binary, remove):
     config = json.loads(original) if original else {}
     hooks = config.setdefault("hooks", {})
     events = ["UserPromptSubmit", "PermissionRequest", "PostToolUse", "Stop", "SessionEnd"]
-    events.append("StopFailure" if service == "claude" else "Interrupt")
+    events += ["SubagentStart", "SubagentStop"]
+    events += ["StopFailure", "PostToolUseFailure"] if service == "claude" else ["Interrupt"]
     group = {"hooks": [{"type": "command", "command": shlex.join([str(binary), "hook", service]), "timeout": 2}]}
     changed = False
     for event in events:

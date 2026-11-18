@@ -8,7 +8,8 @@ use std::io::Write;
 
 const HELP: &str = "Wooting Glance — experimental 80HE hardware diagnostic
 
-glance watch                  Show local agent activity until interrupted
+glance watch                  Show agent activity on the two end LEDs
+glance watch CLAUDE_LED RGB CODEX_LED RGB  Choose both positions and colors
 glance hook claude|codex       Receive a local coding-agent hook on stdin
 glance devices                List supported keyboards (read-only)
 glance inspect                Read active profile and ten LED colors
@@ -25,7 +26,7 @@ No command saves lighting to the keyboard's flash memory.";
 enum Command {
     Help,
     Devices,
-    Watch,
+    Watch([(u8, [u8; 3]); 2]),
     Hook(String),
     Inspect,
     Preview(Vec<(u8, [u8; 3])>),
@@ -36,7 +37,13 @@ fn parse(args: &[String]) -> Result<Command> {
     let args: Vec<_> = args.iter().map(String::as_str).collect();
     Ok(match args.as_slice() {
         [] | ["help" | "--help" | "-h"] => Command::Help,
-        ["watch"] => Command::Watch,
+        ["watch"] => Command::Watch([(0, [0xd9, 0x77, 0x57]), (9, [0x10, 0xa3, 0x7f])]),
+        ["watch", left, orange, right, green] => {
+            let claude = parse_led(left, orange)?;
+            let codex = parse_led(right, green)?;
+            ensure!(claude.0 != codex.0, "choose two different LEDs");
+            Command::Watch([claude, codex])
+        }
         ["hook", service @ ("claude" | "codex")] => Command::Hook((*service).into()),
         ["devices"] => Command::Devices,
         ["inspect"] => Command::Inspect,
@@ -109,8 +116,8 @@ fn macos(command: Command) -> Result<()> {
     if let Command::Hook(service) = &command {
         return agents::forward(&state_dir, service);
     }
-    if command == Command::Watch {
-        return agents::watch(&state_dir);
+    if let Command::Watch(layout) = command {
+        return agents::watch(&state_dir, layout);
     }
     let recovery = Recovery::acquire(&state_dir)?;
     let keyboard = device::Device::open()?;
@@ -168,7 +175,7 @@ fn macos(command: Command) -> Result<()> {
             )?;
             print_colors("Restored readback", &restored)?;
         }
-        Command::Help | Command::Devices | Command::Hook(_) | Command::Watch => unreachable!(),
+        Command::Help | Command::Devices | Command::Hook(_) | Command::Watch(_) => unreachable!(),
     }
     Ok(())
 }

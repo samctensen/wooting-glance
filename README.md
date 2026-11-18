@@ -1,9 +1,18 @@
 # Wooting Glance
 
 Follow Claude Code and Codex on your Wooting 80HE. Glance listens for local
-agent hooks and shows Claude on LED 1 and Codex on LED 10. Blue means working,
-amber means a tool requested approval, and green marks a stopped turn for up
-to eight seconds. When all sessions are idle, Glance restores your saved effects.
+agent hooks and reserves two LEDs while the watcher is running.
+
+| Signal | Meaning |
+| --- | --- |
+| LED 1, orange `#D97757` | Claude Code |
+| LED 10, green `#10A37F` | Codex |
+| Steady | At least one parent or child is working |
+| Slow pulse | An agent requested tool permission |
+| Off | All observed agents for that service have stopped |
+
+The defaults come from [Claude’s logo palette](https://platform.claude.com/docs/en/manage-claude/oauth-apps/branding-samples)
+and the [OpenAI Developers plugin’s brand color](https://github.com/openai/plugins/blob/main/plugins/openai-developers/.codex-plugin/plugin.json).
 
 ## Run the agent lights on macOS
 
@@ -23,14 +32,21 @@ press Control-C in the watcher. Remove its hooks with
 
 The same adapters target the CLI and local coding sessions in the desktop
 apps, including the Code tab in Claude Desktop. Ordinary Claude Chat, Cowork,
-and remote sessions are outside this integration. Desktop hook delivery still
-needs live verification. See the [Claude Code hooks](https://code.claude.com/docs/en/hooks)
-and [Codex hooks](https://developers.openai.com/codex/hooks) references.
+and remote sessions are outside this integration. Parent and child events use the [Claude Code hooks](https://code.claude.com/docs/en/hooks)
+and [Codex hooks](https://developers.openai.com/codex/hooks) interfaces.
 
-Each LED combines sessions for that service, with approval taking priority.
-The other eight LEDs go dark during activity. Hook handlers forward only the
-service, session identifier, and status over a local socket. A stopped watcher
-misses events. An abandoned session expires after an hour without a hook.
+To choose your own LEDs and colors, run `glance watch 2 FF8000 9 00AA88`
+using the built binary. The first pair controls Claude and the second controls
+Codex. Permission pulses vary the brightness of the selected color.
+
+The watcher adds the two indicators over your saved effects. If color readback
+shows the keyboard ignored the combined profile, Glance switches to a temporary
+two-indicator bar with the other LEDs dark. Quitting restores the saved profile.
+Pause the watcher before editing the bar in Wootility or running the diagnostic.
+
+Hooks forward only service, session and child identifiers and state over a local
+socket. An approval indication clears on observed tool progress or completion.
+Glance misses events while stopped and expires stale actors after an hour.
 
 Glance is designed to work alongside Wootility, which remains responsible for
 your keyboard configuration. This is an independent project, not affiliated with

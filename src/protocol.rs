@@ -97,6 +97,11 @@ pub fn baseline(stored: &[u8]) -> Result<BarProfile> {
 }
 
 pub fn preview(stored: &[u8], leds: &[(u8, [u8; 3])]) -> Result<Vec<u8>> {
+    bar_frame(stored, leds, leds.len() == 1)
+}
+
+/// Append indicators to saved effects when requested, keeping unknown fields.
+pub fn bar_frame(stored: &[u8], leds: &[(u8, [u8; 3])], keep_effects: bool) -> Result<Vec<u8>> {
     let saved = baseline(stored)?;
     ensure!((1..=2).contains(&leds.len()), "choose one or two LEDs");
     let mut seen = [false; LED_COUNT];
@@ -115,7 +120,7 @@ pub fn preview(stored: &[u8], leds: &[(u8, [u8; 3])]) -> Result<Vec<u8>> {
             }),
         });
     }
-    let mut body = if leds.len() == 2 {
+    let mut body = if !keep_effects {
         // Two indicators own the bar during preview. Keep the saved brightness.
         let mut frame = BarProfile {
             enabled: true,
