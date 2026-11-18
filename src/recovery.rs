@@ -74,6 +74,16 @@ pub fn preview<K: Keyboard>(
     leds: &[(u8, [u8; 3])],
     during: impl FnOnce() -> Result<()>,
 ) -> Result<Vec<[u8; 3]>> {
+    with_overlay(keyboard, identity, recovery, leds, |_, _| during())
+}
+
+pub fn with_overlay<K: Keyboard>(
+    keyboard: &K,
+    identity: &Identity,
+    recovery: &Recovery,
+    leds: &[(u8, [u8; 3])],
+    during: impl FnOnce(u8, &[u8]) -> Result<()>,
+) -> Result<Vec<[u8; 3]>> {
     let path = &recovery.path;
     ensure!(
         !identity.serial.is_empty(),
@@ -102,7 +112,7 @@ pub fn preview<K: Keyboard>(
             "saved settings changed before preview"
         );
         keyboard.write_profile(slot, &overlay)?;
-        during()
+        during(slot, &record.baseline)
     })();
     let restoration = restore(keyboard, identity, recovery);
     match (operation, restoration) {

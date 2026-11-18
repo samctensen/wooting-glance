@@ -1,27 +1,40 @@
 # Wooting Glance
 
-AI activity, at a glance—on your Wooting light bar.
+Follow Claude Code and Codex on your Wooting 80HE. Glance listens for local
+agent hooks and shows Claude on LED 1 and Codex on LED 10. Blue means working,
+amber means a tool requested approval, and green marks a stopped turn for up
+to eight seconds. When all sessions are idle, Glance restores your saved effects.
 
-Glance is an experimental companion for the Wooting 80HE. The goal is to give
-Claude and ChatGPT their own light-bar zones, so you can see when a service is
-working or a response is ready. Each LED, color, and status pattern will be
-customizable. Muse support is being investigated.
+## Run the agent lights on macOS
 
-**Status:** early development. Browser integrations are not available yet.
-The repository currently contains a macOS hardware diagnostic. One- and two-LED
-previews and restoration have been exercised on an 80HE; full-bar control is
-still being investigated.
+With a connected 80HE, run these commands from the checkout:
+
+```sh
+cargo build --release --locked
+python3 scripts/agent-hooks.py
+./target/release/glance watch
+```
+
+Keep the watcher running and start a fresh agent session. In Codex, use
+`/hooks` to review and trust the Glance command definitions. The installer adds
+entries to your user hook files and preserves existing handlers. To stop,
+press Control-C in the watcher. Remove its hooks with
+`python3 scripts/agent-hooks.py --remove` before moving the checkout.
+
+The same adapters target the CLI and local coding sessions in the desktop
+apps, including the Code tab in Claude Desktop. Ordinary Claude Chat, Cowork,
+and remote sessions are outside this integration. Desktop hook delivery still
+needs live verification. See the [Claude Code hooks](https://code.claude.com/docs/en/hooks)
+and [Codex hooks](https://developers.openai.com/codex/hooks) references.
+
+Each LED combines sessions for that service, with approval taking priority.
+The other eight LEDs go dark during activity. Hook handlers forward only the
+service, session identifier, and status over a local socket. A stopped watcher
+misses events. An abandoned session expires after an hour without a hook.
 
 Glance is designed to work alongside Wootility, which remains responsible for
 your keyboard configuration. This is an independent project, not affiliated with
 or endorsed by Wooting, OpenAI, Anthropic, or Muse.
-
-## Direction
-
-- Service status first, with fixed zones that stay recognizable.
-- Individual LED and color controls, with useful defaults.
-- Local processing; no collection of prompts or responses.
-- Temporary lighting overlays that return to your saved Wootility settings.
 
 ## Try the diagnostic
 

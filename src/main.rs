@@ -1,4 +1,6 @@
 #[cfg(target_os = "macos")]
+mod agents;
+#[cfg(target_os = "macos")]
 mod device;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -6,6 +8,8 @@ use std::io::Write;
 
 const HELP: &str = "Wooting Glance — experimental 80HE hardware diagnostic
 
+glance watch                  Show local agent activity until interrupted
+glance hook claude|codex       Receive a local coding-agent hook on stdin
 glance devices                List supported keyboards (read-only)
 glance inspect                Read active profile and ten LED colors
 glance preview LED RGB [LED RGB]  Preview one or two LEDs for three seconds
@@ -21,6 +25,8 @@ No command saves lighting to the keyboard's flash memory.";
 enum Command {
     Help,
     Devices,
+    Watch,
+    Hook(String),
     Inspect,
     Preview(Vec<(u8, [u8; 3])>),
     Restore,
@@ -30,6 +36,8 @@ fn parse(args: &[String]) -> Result<Command> {
     let args: Vec<_> = args.iter().map(String::as_str).collect();
     Ok(match args.as_slice() {
         [] | ["help" | "--help" | "-h"] => Command::Help,
+        ["watch"] => Command::Watch,
+        ["hook", service @ ("claude" | "codex")] => Command::Hook((*service).into()),
         ["devices"] => Command::Devices,
         ["inspect"] => Command::Inspect,
         ["restore"] => Command::Restore,
@@ -98,6 +106,12 @@ fn macos(command: Command) -> Result<()> {
     let home = std::env::var_os("HOME")
         .context("HOME is unavailable; cannot locate recovery directory")?;
     let state_dir = PathBuf::from(home).join("Library/Application Support/wooting-glance");
+    if let Command::Hook(service) = &command {
+        return agents::forward(&state_dir, service);
+    }
+    if command == Command::Watch {
+        return agents::watch(&state_dir);
+    }
     let recovery = Recovery::acquire(&state_dir)?;
     let keyboard = device::Device::open()?;
     match command {
@@ -154,7 +168,7 @@ fn macos(command: Command) -> Result<()> {
             )?;
             print_colors("Restored readback", &restored)?;
         }
-        Command::Help | Command::Devices => unreachable!(),
+        Command::Help | Command::Devices | Command::Hook(_) | Command::Watch => unreachable!(),
     }
     Ok(())
 }
