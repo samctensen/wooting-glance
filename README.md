@@ -1,7 +1,7 @@
 # Wooting Glance
 
-Follow Claude Code and Codex on your Wooting 80HE. Glance listens for local
-agent hooks and reserves two LEDs while the watcher is running.
+Follow Claude Code, Codex, and Grok Build on your Wooting 80HE. Assign agents
+to individual LEDs and choose their colors.
 
 | Signal | Meaning |
 | --- | --- |
@@ -35,13 +35,35 @@ apps, including the Code tab in Claude Desktop. Ordinary Claude Chat, Cowork,
 and remote sessions are outside this integration. Parent and child events use the [Claude Code hooks](https://code.claude.com/docs/en/hooks)
 and [Codex hooks](https://developers.openai.com/codex/hooks) interfaces.
 
-To choose your own LEDs and colors, run `glance watch 2 FF8000 9 00AA88`
-using the built binary. The first pair controls Claude and the second controls
-Codex. Permission pulses vary the brightness of the selected color.
+### Add Grok Build and choose your layout
 
-The watcher adds the two indicators over your saved effects. If color readback
+Run `python3 scripts/agent-hooks.py --service grok` after building. This installs
+local hooks for Grok Build, the engine used by the community Grok.app desktop client.
+Start a fresh Grok Build session after setup. To remove the hooks, add `--remove`.
+[Supported Grok hook events](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-pager/docs/user-guide/10-hooks.md).
+
+Run `./target/release/glance config init` once and edit
+`~/Library/Application Support/wooting-glance/config.json`. For example:
+
+```json
+{
+  "leds": {
+    "1":  { "agent": "claude", "color": "#D97757" },
+    "5":  { "agent": "grok",  "color": "#FFFFFF" },
+    "10": { "agent": "codex", "color": "#10A37F" }
+  }
+}
+```
+
+LED 1 is on the left. Assign the same agent to multiple positions to give it
+more than one LED. Stop the watcher before running `glance preview` to see
+the configured colors. Restart `glance watch` to load the layout. With no
+config file, Glance uses the original two end LEDs. The positional command
+`glance watch 2 FF8000 9 00AA88` still works for Claude and Codex.
+
+The watcher adds the configured indicators over your saved effects. If color readback
 shows the keyboard ignored the combined profile, Glance switches to a temporary
-two-indicator bar with the other LEDs dark. Quitting restores the saved profile.
+bar with the other LEDs dark. Quitting restores the saved profile.
 Pause the watcher before editing the bar in Wootility or running the diagnostic.
 
 Hooks forward only service, session and child identifiers and state over a local

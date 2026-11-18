@@ -103,7 +103,10 @@ pub fn preview(stored: &[u8], leds: &[(u8, [u8; 3])]) -> Result<Vec<u8>> {
 /// Append indicators to saved effects when requested, keeping unknown fields.
 pub fn bar_frame(stored: &[u8], leds: &[(u8, [u8; 3])], keep_effects: bool) -> Result<Vec<u8>> {
     let saved = baseline(stored)?;
-    ensure!((1..=2).contains(&leds.len()), "choose one or two LEDs");
+    ensure!(
+        (1..=LED_COUNT).contains(&leds.len()),
+        "choose one to ten LEDs"
+    );
     let mut seen = [false; LED_COUNT];
     let mut layers = Vec::with_capacity(leds.len());
     for &(index, rgb) in leds {
@@ -121,7 +124,7 @@ pub fn bar_frame(stored: &[u8], leds: &[(u8, [u8; 3])], keep_effects: bool) -> R
         });
     }
     let mut body = if !keep_effects {
-        // Two indicators own the bar during preview. Keep the saved brightness.
+        // The indicators own the bar during preview. Keep the saved brightness.
         let mut frame = BarProfile {
             enabled: true,
             layers: vec![],

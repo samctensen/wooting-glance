@@ -3,14 +3,19 @@ mod agents;
 #[cfg(target_os = "macos")]
 mod device;
 
+mod layout;
+use layout::{Indicator, Service};
+
 use anyhow::{Context, Result, bail, ensure};
 use std::io::Write;
 
 const HELP: &str = "Wooting Glance — experimental 80HE hardware diagnostic
 
-glance watch                  Show agent activity on the two end LEDs
+glance watch                  Watch the layout saved in config.json
 glance watch CLAUDE_LED RGB CODEX_LED RGB  Choose both positions and colors
-glance hook claude|codex       Receive a local coding-agent hook on stdin
+glance config init             Create an editable default LED layout
+glance preview                 Preview the colors in your layout
+glance hook claude|codex|grok       Receive a local coding-agent hook on stdin
 glance devices                List supported keyboards (read-only)
 glance inspect                Read active profile and ten LED colors
 glance preview LED RGB [LED RGB]  Preview one or two LEDs for three seconds
@@ -26,8 +31,10 @@ No command saves lighting to the keyboard's flash memory.";
 enum Command {
     Help,
     Devices,
-    Watch([(u8, [u8; 3]); 2]),
-    Hook(String),
+    Watch(Option<Vec<Indicator>>),
+    ConfigInit,
+    PreviewLayout,
+    Hook(Service),
     Inspect,
     Preview(Vec<(u8, [u8; 3])>),
     Restore,
@@ -37,14 +44,29 @@ fn parse(args: &[String]) -> Result<Command> {
     let args: Vec<_> = args.iter().map(String::as_str).collect();
     Ok(match args.as_slice() {
         [] | ["help" | "--help" | "-h"] => Command::Help,
-        ["watch"] => Command::Watch([(0, [0xd9, 0x77, 0x57]), (9, [0x10, 0xa3, 0x7f])]),
+        ["watch"] => Command::Watch(None),
         ["watch", left, orange, right, green] => {
             let claude = parse_led(left, orange)?;
             let codex = parse_led(right, green)?;
             ensure!(claude.0 != codex.0, "choose two different LEDs");
-            Command::Watch([claude, codex])
+            Command::Watch(Some(vec![
+                Indicator {
+                    led: claude.0,
+                    color: claude.1,
+                    agent: Service::Claude,
+                },
+                Indicator {
+                    led: codex.0,
+                    color: codex.1,
+                    agent: Service::Codex,
+                },
+            ]))
         }
-        ["hook", service @ ("claude" | "codex")] => Command::Hook((*service).into()),
+        ["hook", "claude"] => Command::Hook(Service::Claude),
+        ["hook", "codex"] => Command::Hook(Service::Codex),
+        ["hook", "grok"] => Command::Hook(Service::Grok),
+        ["config", "init"] => Command::ConfigInit,
+        ["preview"] => Command::PreviewLayout,
         ["devices"] => Command::Devices,
         ["inspect"] => Command::Inspect,
         ["restore"] => Command::Restore,
@@ -114,11 +136,34 @@ fn macos(command: Command) -> Result<()> {
         .context("HOME is unavailable; cannot locate recovery directory")?;
     let state_dir = PathBuf::from(home).join("Library/Application Support/wooting-glance");
     if let Command::Hook(service) = &command {
-        return agents::forward(&state_dir, service);
+        return agents::forward(&state_dir, *service);
     }
-    if let Command::Watch(layout) = command {
-        return agents::watch(&state_dir, layout);
+    let path = state_dir.join("config.json");
+    if command == Command::ConfigInit {
+        std::fs::create_dir_all(&state_dir)?;
+        let mut file = std::fs::File::create_new(&path)
+            .with_context(|| format!("creating {}", path.display()))?;
+        file.write_all(layout::DEFAULT.as_bytes())?;
+        println!("{}", path.display());
+        return Ok(());
     }
+    if let Command::Watch(custom) = command {
+        let layout = match custom {
+            Some(layout) => layout,
+            None => layout::load(&path)?,
+        };
+        return agents::watch(&state_dir, &layout);
+    }
+    let command = if command == Command::PreviewLayout {
+        Command::Preview(
+            layout::load(&path)?
+                .into_iter()
+                .map(|i| (i.led, i.color))
+                .collect(),
+        )
+    } else {
+        command
+    };
     let recovery = Recovery::acquire(&state_dir)?;
     let keyboard = device::Device::open()?;
     match command {
@@ -175,7 +220,12 @@ fn macos(command: Command) -> Result<()> {
             )?;
             print_colors("Restored readback", &restored)?;
         }
-        Command::Help | Command::Devices | Command::Hook(_) | Command::Watch(_) => unreachable!(),
+        Command::ConfigInit
+        | Command::PreviewLayout
+        | Command::Help
+        | Command::Devices
+        | Command::Hook(_)
+        | Command::Watch(_) => unreachable!(),
     }
     Ok(())
 }

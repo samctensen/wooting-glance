@@ -16,6 +16,10 @@ def configure(path, service, binary, remove):
     events = ["UserPromptSubmit", "PermissionRequest", "PostToolUse", "Stop", "SessionEnd"]
     events += ["SubagentStart", "SubagentStop"]
     events += ["StopFailure", "PostToolUseFailure"] if service == "claude" else ["Interrupt"]
+    if service == "grok":
+        events = ["UserPromptSubmit", "PostToolUse", "PostToolUseFailure", "PermissionDenied",
+                  "Notification", "SubagentStart", "SubagentStop", "Stop", "StopFailure",
+                  "StopCancelled", "SessionEnd"]
     group = {"hooks": [{"type": "command", "command": shlex.join([str(binary), "hook", service]), "timeout": 2}]}
     changed = False
     for event in events:
@@ -44,6 +48,8 @@ def configure(path, service, binary, remove):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--remove", action="store_true")
+    parser.add_argument("--service", choices=["claude", "codex", "grok"],
+                        help="configure one service (default: Claude and Codex)")
     args = parser.parse_args()
     binary = Path(__file__).resolve().parents[1] / "target/release/glance"
     if not args.remove and not binary.is_file():
@@ -51,6 +57,9 @@ if __name__ == "__main__":
     for service, env, default, filename in [
         ("claude", "CLAUDE_CONFIG_DIR", ".claude", "settings.json"),
         ("codex", "CODEX_HOME", ".codex", "hooks.json"),
+        ("grok", "GROK_HOME", ".grok", "hooks/wooting-glance.json"),
     ]:
+        if service not in ([args.service] if args.service else ["claude", "codex"]):
+            continue
         config_dir = Path(os.environ.get(env) or Path.home() / default)
         configure(config_dir / filename, service, binary, args.remove)
