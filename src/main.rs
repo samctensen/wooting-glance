@@ -15,7 +15,7 @@ glance watch                  Watch the layout saved in config.json
 glance watch CLAUDE_LED RGB CODEX_LED RGB  Choose both positions and colors
 glance config init             Create an editable default LED layout
 glance preview                 Preview the colors in your layout
-glance hook claude|codex|grok       Receive a local coding-agent hook on stdin
+glance hook claude|codex|grok|muse       Receive a local coding-agent hook on stdin
 glance devices                List supported keyboards (read-only)
 glance inspect                Read active profile and ten LED colors
 glance preview LED RGB [LED RGB]  Preview one or two LEDs for three seconds
@@ -65,6 +65,7 @@ fn parse(args: &[String]) -> Result<Command> {
         ["hook", "claude"] => Command::Hook(Service::Claude),
         ["hook", "codex"] => Command::Hook(Service::Codex),
         ["hook", "grok"] => Command::Hook(Service::Grok),
+        ["hook", "muse"] => Command::Hook(Service::Muse),
         ["config", "init"] => Command::ConfigInit,
         ["preview"] => Command::PreviewLayout,
         ["devices"] => Command::Devices,

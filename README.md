@@ -1,6 +1,6 @@
 # Wooting Glance
 
-Follow Claude Code, Codex, and Grok Build on your Wooting 80HE. Assign agents
+Follow Claude Code, Codex, Grok Build, and Muse Code on your Wooting 80HE. Assign agents
 to individual LEDs and choose their colors.
 
 | Signal | Meaning |
@@ -35,12 +35,18 @@ apps, including the Code tab in Claude Desktop. Ordinary Claude Chat, Cowork,
 and remote sessions are outside this integration. Parent and child events use the [Claude Code hooks](https://code.claude.com/docs/en/hooks)
 and [Codex hooks](https://developers.openai.com/codex/hooks) interfaces.
 
-### Add Grok Build and choose your layout
+### Add Grok Build or Muse Code
 
 Run `python3 scripts/agent-hooks.py --service grok` after building. This installs
 local hooks for Grok Build, the engine used by the community Grok.app desktop client.
 Start a fresh Grok Build session after setup. To remove the hooks, add `--remove`.
 [Supported Grok hook events](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-pager/docs/user-guide/10-hooks.md).
+
+For Muse Code, run `python3 scripts/agent-hooks.py --service muse` and start a fresh
+terminal session. The installer adds hooks to your Muse user settings.
+[Muse Code hook events](https://meta-models.github.io/muse-code-sdk/1.4/guides/plugins/reference/hook-events/).
+
+### Choose your layout
 
 Run `./target/release/glance config init` once and edit
 `~/Library/Application Support/wooting-glance/config.json`. For example:
@@ -49,7 +55,8 @@ Run `./target/release/glance config init` once and edit
 {
   "leds": {
     "1":  { "agent": "claude", "color": "#D97757" },
-    "5":  { "agent": "grok",  "color": "#FFFFFF" },
+    "4":  { "agent": "grok",  "color": "#FFFFFF" },
+    "7":  { "agent": "muse",  "color": "#A855F7" },
     "10": { "agent": "codex", "color": "#10A37F" }
   }
 }

@@ -12,10 +12,12 @@ def configure(path, service, binary, remove):
         return
     original = path.read_bytes() if path.exists() else None
     config = json.loads(original) if original else {}
+    if service == "muse":
+        config.setdefault("schema_version", 1)
     hooks = config.setdefault("hooks", {})
     events = ["UserPromptSubmit", "PermissionRequest", "PostToolUse", "Stop", "SessionEnd"]
     events += ["SubagentStart", "SubagentStop"]
-    events += ["StopFailure", "PostToolUseFailure"] if service == "claude" else ["Interrupt"]
+    events += ["StopFailure", "PostToolUseFailure"] if service in ("claude", "muse") else ["Interrupt"]
     if service == "grok":
         events = ["UserPromptSubmit", "PostToolUse", "PostToolUseFailure", "PermissionDenied",
                   "Notification", "SubagentStart", "SubagentStop", "Stop", "StopFailure",
@@ -48,7 +50,7 @@ def configure(path, service, binary, remove):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--remove", action="store_true")
-    parser.add_argument("--service", choices=["claude", "codex", "grok"],
+    parser.add_argument("--service", choices=["claude", "codex", "grok", "muse"],
                         help="configure one service (default: Claude and Codex)")
     args = parser.parse_args()
     binary = Path(__file__).resolve().parents[1] / "target/release/glance"
@@ -57,6 +59,7 @@ if __name__ == "__main__":
     for service, env, default, filename in [
         ("claude", "CLAUDE_CONFIG_DIR", ".claude", "settings.json"),
         ("codex", "CODEX_HOME", ".codex", "hooks.json"),
+        ("muse", "XDG_CONFIG_HOME", ".config", "muse/settings.json"),
         ("grok", "GROK_HOME", ".grok", "hooks/wooting-glance.json"),
     ]:
         if service not in ([args.service] if args.service else ["claude", "codex"]):

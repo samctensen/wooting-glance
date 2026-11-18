@@ -9,9 +9,10 @@ pub enum Service {
     Claude,
     Codex,
     Grok,
+    Muse,
 }
 
-pub const COUNT: usize = Service::Grok as usize + 1;
+pub const COUNT: usize = Service::Muse as usize + 1;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Indicator {

@@ -28,6 +28,7 @@ struct Hook {
     session_id: Option<String>,
     hook_event_name: String,
     agent_id: Option<String>,
+    child_session_id: Option<String>,
     #[serde(rename = "hookEventName")]
     grok_event_name: Option<String>,
 }
@@ -60,6 +61,13 @@ struct GrokHook {
 
 fn read_event(input: impl io::Read, service: Service) -> Result<Option<Event>> {
     Ok(match service {
+        Service::Muse => {
+            let hook: Hook = serde_json::from_reader(input)?;
+            hook.muse_event(
+                std::env::var("MUSE_SESSION_ID").ok(),
+                std::env::var("MUSE_THREAD_ID").ok(),
+            )
+        }
         Service::Grok => serde_json::from_reader::<_, GrokHook>(input)?.event(),
         Service::Claude | Service::Codex => {
             serde_json::from_reader::<_, Hook>(input)?.event(service as u8)
@@ -111,6 +119,24 @@ pub fn forward(dir: &Path, service: Service) -> Result<()> {
 }
 
 impl Hook {
+    fn muse_event(mut self, root: Option<String>, thread: Option<String>) -> Option<Event> {
+        // Muse names the child session on parent lifecycle events and exports its
+        // thread ID on events originating in the child. Key both by the same ID.
+        let session = self.session_id.take()?;
+        let root = root.unwrap_or_else(|| session.clone());
+        self.agent_id = if matches!(
+            self.hook_event_name.as_str(),
+            "SubagentStart" | "SubagentStop"
+        ) {
+            self.child_session_id.take()
+        } else {
+            let thread = thread.unwrap_or(session);
+            (thread != root).then_some(thread)
+        };
+        self.session_id = Some(root);
+        self.event(Service::Muse as u8)
+    }
+
     fn event(self, service: u8) -> Option<Event> {
         // Grok imports Claude's hooks and also supplies the PascalCase Claude event name.
         if self.grok_event_name.is_some() {
@@ -306,6 +332,7 @@ mod tests {
     fn send(a: &mut Activity, service: u8, session: &str, actor: Option<&str>, name: &str) {
         let hook = Hook {
             session_id: Some(session.into()),
+            child_session_id: None,
             grok_event_name: None,
             agent_id: actor.map(str::to_owned),
             hook_event_name: name.into(),
@@ -326,18 +353,23 @@ mod tests {
         send(&mut a, 1, "b", None, "UserPromptSubmit");
         assert_eq!(
             a.states(Instant::now()),
-            [Status::Approval, Status::Working, Status::Idle]
+            [
+                Status::Approval,
+                Status::Working,
+                Status::Idle,
+                Status::Idle
+            ]
         );
         send(&mut a, 0, "a", Some("child"), "PostToolUse");
         send(&mut a, 0, "a", Some("sibling"), "SubagentStop");
         assert_eq!(
             a.states(Instant::now()),
-            [Status::Working, Status::Working, Status::Idle]
+            [Status::Working, Status::Working, Status::Idle, Status::Idle]
         );
         send(&mut a, 0, "a", Some("child"), "SubagentStop");
         assert_eq!(
             a.states(Instant::now()),
-            [Status::Idle, Status::Working, Status::Idle]
+            [Status::Idle, Status::Working, Status::Idle, Status::Idle]
         );
     }
     #[test]
@@ -348,7 +380,7 @@ mod tests {
         send(&mut a, 1, "x", None, "Interrupt");
         assert_eq!(
             a.states(Instant::now()),
-            [Status::Idle, Status::Working, Status::Idle]
+            [Status::Idle, Status::Working, Status::Idle, Status::Idle]
         );
         send(&mut a, 1, "y", None, "Stop");
         assert_eq!(a.states(Instant::now()), [Status::Idle; COUNT]);
@@ -366,7 +398,10 @@ mod tests {
                     .unwrap()
                     .is_none()
             );
-            assert_eq!(activity.states(now), [Status::Idle, Status::Idle, expected]);
+            assert_eq!(
+                activity.states(now),
+                [Status::Idle, Status::Idle, expected, Status::Idle]
+            );
         };
         check(
             r#"{"sessionId":"main","hookEventName":"user_prompt_submit","hook_event_name":"UserPromptSubmit"}"#,
@@ -407,9 +442,34 @@ mod tests {
     }
 
     #[test]
+    fn muse_child_approval_survives_parent_stop_and_clears_on_teardown() {
+        let now = Instant::now();
+        let mut activity = Activity::default();
+        for (name, thread, child, expected) in [
+            ("UserPromptSubmit", "root", None, Status::Working),
+            ("SubagentStart", "root", Some("child"), Status::Working),
+            ("PermissionRequest", "child", None, Status::Approval),
+            ("Stop", "root", None, Status::Approval),
+            ("PostToolUse", "child", None, Status::Working),
+            ("SubagentStop", "root", Some("child"), Status::Idle),
+        ] {
+            let hook: Hook = serde_json::from_value(serde_json::json!({
+                "session_id": thread, "hook_event_name": name, "child_session_id": child,
+            }))
+            .unwrap();
+            activity.update(
+                hook.muse_event(Some("root".into()), Some(thread.into()))
+                    .unwrap(),
+                now,
+            );
+            assert_eq!(activity.states(now)[Service::Muse as usize], expected);
+        }
+    }
+
+    #[test]
     fn json_layout_paints_only_assigned_positions() {
         let layout = crate::layout::parse(r##"{"leds":{"7":{"agent":"grok","color":"#AA2200"},"2":{"agent":"grok","color":"#223344"},"10":{"agent":"codex","color":"#10A37F"}}}"##).unwrap();
-        let states = [Status::Idle, Status::Idle, Status::Working];
+        let states = [Status::Idle, Status::Idle, Status::Working, Status::Idle];
         assert_eq!(
             frame(&layout, states, Duration::ZERO),
             [(1, [34, 51, 68]), (6, [170, 34, 0]), (9, [0; 3])]
@@ -419,7 +479,12 @@ mod tests {
     #[test]
     fn only_the_waiting_service_changes_intensity() {
         let layout = crate::layout::parse(crate::layout::DEFAULT).unwrap();
-        let states = [Status::Approval, Status::Working, Status::Idle];
+        let states = [
+            Status::Approval,
+            Status::Working,
+            Status::Idle,
+            Status::Idle,
+        ];
         let full = frame(&layout, states, Duration::ZERO);
         let dim = frame(&layout, states, Duration::from_millis(1200));
         assert_eq!(full, [(0, [217, 119, 87]), (9, [16, 163, 127])]);
