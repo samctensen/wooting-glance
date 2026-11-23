@@ -83,7 +83,7 @@ checksum = "0e9c71c2167ca323c882b99918929403426e2373ea17242ff5653e0d5e1058be"
 [[package]]
 name = "eywa-api"
 version = "0.1.0"
-source = "git+https://github.com/samctensen/eywa?branch=feat%2Fapi-crate#6520a5daede0fa2d8d06725511f55ea38ca34d05"
+source = "git+https://github.com/samctensen/eywa?rev=f8b6001a6018dcaefbc2bb7a7fc494bd5983c91b#f8b6001a6018dcaefbc2bb7a7fc494bd5983c91b"
 dependencies = [
  "serde",
  "serde_json",

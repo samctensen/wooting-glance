@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
-eywa-api = { git = "https://github.com/samctensen/eywa", branch = "feat/api-crate" }
+eywa-api = { git = "https://github.com/samctensen/eywa", rev = "f8b6001a6018dcaefbc2bb7a7fc494bd5983c91b" }
 prost = "0.14"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
