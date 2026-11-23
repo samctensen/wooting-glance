@@ -54,6 +54,7 @@ pub fn subscribe(
         tx,
         sent: None,
         outage: true,
+        unreadable_reported: false,
         launching: true,
     };
     thread::Builder::new()
@@ -69,11 +70,15 @@ struct Subscriber {
     tx: mpsc::Sender<Result<Option<Clients>>>,
     sent: Option<Clients>,
     outage: bool,
+    /// Whether this outage's unreadable line has been reported.
+    unreadable_reported: bool,
     launching: bool,
 }
 
 enum End {
     Lost,
+    /// A line Glance couldn't decode, with the reason.
+    Unreadable(String),
     Rejected(String),
     Gone,
 }
@@ -98,7 +103,13 @@ impl Subscriber {
                 Err(_) => End::Lost,
             };
             match end {
+                End::Lost if !self.outage => eprintln!("Glance: lost Eywa; reconnecting."),
                 End::Lost => {}
+                End::Unreadable(error) => {
+                    if !std::mem::replace(&mut self.unreadable_reported, true) {
+                        eprintln!("Glance: can't read Eywa's message ({error}); resubscribing.");
+                    }
+                }
                 End::Rejected(reason) => {
                     let _ = self
                         .tx
@@ -107,10 +118,7 @@ impl Subscriber {
                 }
                 End::Gone => return,
             }
-            if !self.outage {
-                self.outage = true;
-                eprintln!("Glance: lost Eywa; reconnecting.");
-            }
+            self.outage = true;
             if !self.emit(None) {
                 return;
             }
@@ -127,8 +135,9 @@ impl Subscriber {
         let mut rows: HashMap<String, Row> = HashMap::new();
         for line in BufReader::new(stream).lines() {
             let Ok(line) = line else { return End::Lost };
-            let Ok(message) = serde_json::from_str::<Message>(&line) else {
-                return End::Lost;
+            let message = match serde_json::from_str::<Message>(&line) {
+                Ok(message) => message,
+                Err(error) => return End::Unreadable(error.to_string()),
             };
             match message {
                 Message::Snapshot { rows: all, .. } => {
@@ -147,6 +156,7 @@ impl Subscriber {
             }
             if self.outage {
                 self.outage = false;
+                self.unreadable_reported = false;
                 eprintln!("Glance: connected to Eywa.");
             }
             if !self.emit(Some(clients(&rows))) {
