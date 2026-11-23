@@ -2,6 +2,8 @@
 mod agents;
 #[cfg(target_os = "macos")]
 mod device;
+#[cfg(target_os = "macos")]
+mod eywa;
 
 mod layout;
 use layout::{Indicator, Service};
