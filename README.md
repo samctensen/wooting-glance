@@ -7,44 +7,57 @@ to individual LEDs and choose their colors.
 | --- | --- |
 | LED 1, orange `#D97757` | Claude Code |
 | LED 10, green `#10A37F` | Codex |
-| Steady | At least one parent or child is working |
-| Slow pulse | An agent requested tool permission |
-| Off | All observed agents for that service have stopped |
+| Steady | The agent is working |
+| Slow pulse | The agent is waiting on you: a tool approval, a question or MCP input |
+| Off | Idle, or Eywa can't confirm what the agent is doing |
 
 The defaults come from [Claude’s logo palette](https://platform.claude.com/docs/en/manage-claude/oauth-apps/branding-samples)
 and the [OpenAI Developers plugin’s brand color](https://github.com/openai/plugins/blob/main/plugins/openai-developers/.codex-plugin/plugin.json).
 
 ## Run the agent lights on macOS
 
-With a connected 80HE, run these commands from the checkout:
+Glance shows what [Eywa](https://github.com/samctensen/eywa) publishes. Eywa is
+a background service that tracks Claude Code, Codex, Grok Build and Muse Code;
+Glance reads its state with Eywa's own `eywa-api` types. Install Eywa and
+connect your agents once:
+
+```sh
+cargo install --git https://github.com/samctensen/eywa
+eywa start
+eywa autostart on
+eywa setup
+```
+
+In Codex, run `/hooks` and trust the new hooks. In Grok Build, trust the folders
+you work in. Start a new session in each agent so it loads the hooks.
+
+Then, with a connected 80HE, run these commands from the checkout:
 
 ```sh
 cargo build --release --locked
-python3 scripts/agent-hooks.py
 ./target/release/glance watch
 ```
 
-Keep the watcher running and start a fresh agent session. In Codex, use
-`/hooks` to review and trust the Glance command definitions. The installer adds
-entries to your user hook files and preserves existing handlers. To stop,
-press Control-C in the watcher. Remove its hooks with
-`python3 scripts/agent-hooks.py --remove` before moving the checkout.
+If Eywa isn't running when you start `glance watch`, Glance starts it with
+`eywa start`. Keep the watcher running; to stop, press Control-C. If Eywa stops
+or restarts later, the LEDs go dark until it's back. Glance reconnects on its
+own, but it doesn't restart an Eywa you stopped.
 
-The same adapters target the CLI and local coding sessions in the desktop
-apps, including the Code tab in Claude Desktop. Ordinary Claude Chat, Cowork,
-and remote sessions are outside this integration. Parent and child events use the [Claude Code hooks](https://code.claude.com/docs/en/hooks)
-and [Codex hooks](https://developers.openai.com/codex/hooks) interfaces.
+### Upgrade from Glance's own hooks
 
-### Add Grok Build or Muse Code
+Earlier versions installed `glance hook` entries in each agent's settings, and
+those entries now fail on every agent event. From the same checkout, restore
+the old installer, remove its hooks, then delete it again:
 
-Run `python3 scripts/agent-hooks.py --service grok` after building. This installs
-local hooks for Grok Build, the engine used by the community Grok.app desktop client.
-Start a fresh Grok Build session after setup. To remove the hooks, add `--remove`.
-[Supported Grok hook events](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-pager/docs/user-guide/10-hooks.md).
+```sh
+git show "$(git rev-list -n 1 HEAD -- scripts/agent-hooks.py)^:scripts/agent-hooks.py" > scripts/agent-hooks.py
+for s in claude codex grok muse; do python3 scripts/agent-hooks.py --remove --service "$s"; done
+rm scripts/agent-hooks.py
+```
 
-For Muse Code, run `python3 scripts/agent-hooks.py --service muse` and start a fresh
-terminal session. The installer adds hooks to your Muse user settings.
-[Muse Code hook events](https://meta-models.github.io/muse-code-sdk/1.4/guides/plugins/reference/hook-events/).
+Or delete every hook whose command ends in `glance hook <agent>` from
+`~/.claude/settings.json`, `~/.codex/hooks.json`,
+`~/.config/muse/settings.json` and `~/.grok/hooks/wooting-glance.json`.
 
 ### Choose your layout
 
@@ -62,8 +75,10 @@ Run `./target/release/glance config init` once and edit
 }
 ```
 
-LED 1 is on the left. Assign the same agent to multiple positions to give it
-more than one LED. Stop the watcher before running `glance preview` to see
+An agent is any client Eywa reports by name: `claude`, `codex`, `grok` and
+`muse` today. Glance names any configured agent Eywa doesn't have, and leaves
+its LED dark. LED 1 is on the left. Assign the same agent to multiple
+positions to give it more than one LED. Stop the watcher before running `glance preview` to see
 the configured colors. Restart `glance watch` to load the layout. With no
 config file, Glance uses the original two end LEDs. The positional command
 `glance watch 2 FF8000 9 00AA88` still works for Claude and Codex.
@@ -73,9 +88,9 @@ shows the keyboard ignored the combined profile, Glance switches to a temporary
 bar with the other LEDs dark. Quitting restores the saved profile.
 Pause the watcher before editing the bar in Wootility or running the diagnostic.
 
-Hooks forward only service, session and child identifiers and state over a local
-socket. An approval indication clears on observed tool progress or completion.
-Glance misses events while stopped and expires stale actors after an hour.
+Glance reads only Eywa's summary for each agent app, over Eywa's local socket.
+See [Eywa's privacy notes](https://github.com/samctensen/eywa#privacy) for what
+its hooks collect.
 
 Glance is designed to work alongside Wootility, which remains responsible for
 your keyboard configuration. This is an independent project, not affiliated with
