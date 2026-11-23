@@ -1,4 +1,3 @@
-#![allow(dead_code)] // Until `glance watch` uses this module.
 //! Follows Eywa's client rows over its local API, decoded with `eywa-api`.
 
 use anyhow::{Context, Result, anyhow, ensure};

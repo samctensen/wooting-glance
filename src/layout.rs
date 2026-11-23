@@ -2,29 +2,26 @@ use anyhow::{Context, Result, ensure};
 use serde::Deserialize;
 use std::{collections::BTreeMap, fs, path::Path};
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "lowercase")]
-#[repr(u8)]
-pub enum Service {
-    Claude,
-    Codex,
-    Grok,
-    Muse,
-}
-
-pub const COUNT: usize = Service::Muse as usize + 1;
-
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Indicator {
     pub led: u8,
     pub color: [u8; 3],
-    pub agent: Service,
+    /// An Eywa client name, such as `claude`: Glance reads the row `/<agent>`.
+    pub agent: String,
+}
+
+/// Whether `name` can be an Eywa client name.
+pub fn valid_agent(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Entry {
-    agent: Service,
+    agent: String,
     color: String,
 }
 
@@ -53,6 +50,11 @@ pub fn parse(contents: &str) -> Result<Vec<Indicator>> {
             position == (led + 1).to_string(),
             "invalid LED key {position}"
         );
+        ensure!(
+            valid_agent(&entry.agent),
+            "invalid agent name {:?} for LED {position}",
+            entry.agent
+        );
         result.push(Indicator {
             led,
             color,
@@ -70,5 +72,20 @@ pub fn load(path: &Path) -> Result<Vec<Indicator>> {
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => parse(DEFAULT),
         Err(e) => Err(e).with_context(|| format!("cannot read {}", path.display())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn agent_names_are_eywa_client_names() {
+        let layout = parse(r##"{"leds":{"3":{"agent":"cursor-2","color":"#000000"}}}"##).unwrap();
+        assert_eq!(layout[0].agent, "cursor-2");
+        for name in ["Claude", "", "my agent", "/claude"] {
+            let config = format!(r##"{{"leds":{{"3":{{"agent":"{name}","color":"#000000"}}}}}}"##);
+            assert!(parse(&config).is_err(), "{name:?} was accepted");
+        }
     }
 }

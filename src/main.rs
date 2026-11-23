@@ -6,18 +6,17 @@ mod device;
 mod eywa;
 
 mod layout;
-use layout::{Indicator, Service};
+use layout::Indicator;
 
 use anyhow::{Context, Result, bail, ensure};
 use std::io::Write;
 
 const HELP: &str = "Wooting Glance — experimental 80HE hardware diagnostic
 
-glance watch                  Watch the layout saved in config.json
+glance watch                  Show Eywa's agent states on the layout in config.json
 glance watch CLAUDE_LED RGB CODEX_LED RGB  Choose both positions and colors
 glance config init             Create an editable default LED layout
 glance preview                 Preview the colors in your layout
-glance hook claude|codex|grok|muse       Receive a local coding-agent hook on stdin
 glance devices                List supported keyboards (read-only)
 glance inspect                Read active profile and ten LED colors
 glance preview LED RGB [LED RGB]  Preview one or two LEDs for three seconds
@@ -36,7 +35,6 @@ enum Command {
     Watch(Option<Vec<Indicator>>),
     ConfigInit,
     PreviewLayout,
-    Hook(Service),
     Inspect,
     Preview(Vec<(u8, [u8; 3])>),
     Restore,
@@ -55,19 +53,15 @@ fn parse(args: &[String]) -> Result<Command> {
                 Indicator {
                     led: claude.0,
                     color: claude.1,
-                    agent: Service::Claude,
+                    agent: "claude".into(),
                 },
                 Indicator {
                     led: codex.0,
                     color: codex.1,
-                    agent: Service::Codex,
+                    agent: "codex".into(),
                 },
             ]))
         }
-        ["hook", "claude"] => Command::Hook(Service::Claude),
-        ["hook", "codex"] => Command::Hook(Service::Codex),
-        ["hook", "grok"] => Command::Hook(Service::Grok),
-        ["hook", "muse"] => Command::Hook(Service::Muse),
         ["config", "init"] => Command::ConfigInit,
         ["preview"] => Command::PreviewLayout,
         ["devices"] => Command::Devices,
@@ -138,9 +132,6 @@ fn macos(command: Command) -> Result<()> {
     let home = std::env::var_os("HOME")
         .context("HOME is unavailable; cannot locate recovery directory")?;
     let state_dir = PathBuf::from(home).join("Library/Application Support/wooting-glance");
-    if let Command::Hook(service) = &command {
-        return agents::forward(&state_dir, *service);
-    }
     let path = state_dir.join("config.json");
     if command == Command::ConfigInit {
         std::fs::create_dir_all(&state_dir)?;
@@ -155,7 +146,17 @@ fn macos(command: Command) -> Result<()> {
             Some(layout) => layout,
             None => layout::load(&path)?,
         };
-        return agents::watch(&state_dir, &layout);
+        let socket = eywa_api::default_dir().join(eywa_api::API_SOCKET);
+        // `eywa start` refuses a separate copy; that one is started by hand.
+        let separate = std::env::var_os("EYWA_DIR").is_some();
+        let start = move || {
+            ensure!(
+                !separate,
+                "EYWA_DIR is set; start that copy with eywa serve"
+            );
+            eywa::start()
+        };
+        return agents::watch(&state_dir, &socket, start, &layout);
     }
     let command = if command == Command::PreviewLayout {
         Command::Preview(
@@ -227,7 +228,6 @@ fn macos(command: Command) -> Result<()> {
         | Command::PreviewLayout
         | Command::Help
         | Command::Devices
-        | Command::Hook(_)
         | Command::Watch(_) => unreachable!(),
     }
     Ok(())
@@ -263,6 +263,7 @@ mod tests {
             vec!["preview", "1", "12345g"],
             vec!["restore", "extra"],
             vec!["devices", "extra"],
+            vec!["hook", "claude"],
         ] {
             assert!(command(&args).is_err());
         }
