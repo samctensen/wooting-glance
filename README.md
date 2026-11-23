@@ -50,9 +50,9 @@ those entries now fail on every agent event. From the same checkout, restore
 the old installer, remove its hooks, then delete it again:
 
 ```sh
-git show "$(git rev-list -n 1 HEAD -- scripts/agent-hooks.py)^:scripts/agent-hooks.py" > scripts/agent-hooks.py
-for s in claude codex grok muse; do python3 scripts/agent-hooks.py --remove --service "$s"; done
-rm scripts/agent-hooks.py
+git show "$(git rev-list --full-history -n 1 HEAD -- scripts/agent-hooks.py)^:scripts/agent-hooks.py" > scripts/agent-hooks.py &&
+  for s in claude codex grok muse; do python3 scripts/agent-hooks.py --remove --service "$s" || break; done
+rm -f scripts/agent-hooks.py
 ```
 
 Or delete every hook whose command ends in `glance hook <agent>` from
